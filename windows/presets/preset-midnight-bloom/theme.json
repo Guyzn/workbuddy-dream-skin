@@ -1,0 +1,27 @@
+{
+  "id": "preset-midnight-bloom",
+  "name": "Midnight Bloom",
+  "brandSubtitle": "WORKBUDDY DREAM SKIN",
+  "statusText": "DREAM SKIN ONLINE",
+  "quote": "MAKE SOMETHING WONDERFUL",
+  "appearance": "auto",
+  "art": {
+    "file": "background.jpg",
+    "focusX": 0.78,
+    "focusY": 0.55,
+    "safeArea": "left",
+    "taskMode": "auto"
+  },
+  "colors": {
+    "accent": "#e05aa0",
+    "accentAlt": "#ff7ac0",
+    "secondary": "#9b5ce0",
+    "highlight": "#c96ad0"
+  },
+  "explicitColorKeys": ["accent", "accentAlt", "secondary", "highlight"],
+  "surfaceAlpha": 0.82,
+  "blur": 22,
+  "scrim": 0.44,
+  "homeScrim": 0.32,
+  "homeSelector": "[class*='welcome'], [class*='Welcome'], [class*='home'], [class*='Home'], [class*='onboarding']"
+}

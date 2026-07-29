@@ -1,0 +1,27 @@
+{
+  "id": "preset-aurora-dusk",
+  "name": "Aurora Dusk",
+  "brandSubtitle": "WORKBUDDY DREAM SKIN",
+  "statusText": "DREAM SKIN ONLINE",
+  "quote": "MAKE SOMETHING WONDERFUL",
+  "appearance": "auto",
+  "art": {
+    "file": "background.jpg",
+    "focusX": 0.72,
+    "focusY": 0.45,
+    "safeArea": "left",
+    "taskMode": "auto"
+  },
+  "colors": {
+    "accent": "#3fd6a6",
+    "accentAlt": "#5ad1a0",
+    "secondary": "#6aa0ff",
+    "highlight": "#48c9c0"
+  },
+  "explicitColorKeys": ["accent", "accentAlt", "secondary", "highlight"],
+  "surfaceAlpha": 0.82,
+  "blur": 22,
+  "scrim": 0.42,
+  "homeScrim": 0.30,
+  "homeSelector": "[class*='welcome'], [class*='Welcome'], [class*='home'], [class*='Home'], [class*='onboarding']"
+}

@@ -1,0 +1,27 @@
+{
+  "id": "preset-ember-zen",
+  "name": "Ember Zen",
+  "brandSubtitle": "WORKBUDDY DREAM SKIN",
+  "statusText": "DREAM SKIN ONLINE",
+  "quote": "MAKE SOMETHING WONDERFUL",
+  "appearance": "auto",
+  "art": {
+    "file": "background.jpg",
+    "focusX": 0.76,
+    "focusY": 0.50,
+    "safeArea": "left",
+    "taskMode": "auto"
+  },
+  "colors": {
+    "accent": "#f0a050",
+    "accentAlt": "#ffb866",
+    "secondary": "#e0703a",
+    "highlight": "#f0c060"
+  },
+  "explicitColorKeys": ["accent", "accentAlt", "secondary", "highlight"],
+  "surfaceAlpha": 0.82,
+  "blur": 22,
+  "scrim": 0.46,
+  "homeScrim": 0.34,
+  "homeSelector": "[class*='welcome'], [class*='Welcome'], [class*='home'], [class*='Home'], [class*='onboarding']"
+}
