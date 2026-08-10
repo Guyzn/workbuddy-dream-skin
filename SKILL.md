@@ -106,6 +106,13 @@ safe-area detection, per-route scrim (home vs task), blur/frost, and a
    powershell -ExecutionPolicy Bypass -File .\verify-dream-skin.ps1
    ```
 
+4. If `start-dream-skin.ps1` cannot locate WorkBuddy.exe or the CDP port never
+   becomes ready, run the locator and follow its printed hints:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\find-workbuddy.ps1
+   ```
+
 ## Choosing a theme
 
 - List presets:

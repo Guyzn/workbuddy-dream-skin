@@ -96,6 +96,9 @@ powershell -ExecutionPolicy Bypass -File .\tray-dream-skin.ps1
 
 桌面会生成「WorkBuddy Dream Skin」快捷方式。
 
+> 若找不到 WorkBuddy.exe 或 CDP 端口始终不就绪，先跑排查脚本：
+> `powershell -ExecutionPolicy Bypass -File .\find-workbuddy.ps1`（探测应用 / Node / 端口三要素并给出指引）。
+
 ---
 
 ## 内置预设

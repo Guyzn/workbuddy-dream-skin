@@ -17,32 +17,64 @@ function Fail($msg) { Write-Error "WorkBuddy Dream Skin: $msg"; exit 1 }
 function Ensure-StateRoot { if (-not (Test-Path $StateRoot)) { New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null } }
 
 function Find-WorkBuddy {
+  # 1) explicit env override
+  if ($env:WORKBUDDY_EXE -and (Test-Path -LiteralPath $env:WORKBUDDY_EXE)) { return $env:WORKBUDDY_EXE }
+  # 2) known install locations (Electron conventions)
   $candidates = @(
     "$env:LOCALAPPDATA\Programs\WorkBuddy\WorkBuddy.exe",
+    "$env:LOCALAPPDATA\WorkBuddy\WorkBuddy.exe",
     "$env:ProgramFiles\WorkBuddy\WorkBuddy.exe",
-    "${env:ProgramFiles(x86)}\WorkBuddy\WorkBuddy.exe",
-    "$env:LOCALAPPDATA\WorkBuddy\WorkBuddy.exe"
+    "${env:ProgramFiles(x86)}\WorkBuddy\WorkBuddy.exe"
   )
-  foreach ($c in $candidates) { if (Test-Path $c) { return $c } }
-  # Fallback: search Start Menu / Program Files for WorkBuddy.exe
-  $found = Get-ChildItem -Path $env:ProgramFiles, $env:LOCALAPPDATA -Recurse -Filter WorkBuddy.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($found) { return $found.FullName }
-  Fail "Could not find WorkBuddy.exe. Set `$env:WORKBUDDY_EXE or pass the path."
+  foreach ($c in $candidates) { if ($c -and (Test-Path -LiteralPath $c)) { return $c } }
+  # 3) Windows Uninstall registry (fast, precise — no full-disk recursive search)
+  try {
+    $keys = @(
+      'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+      'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+      'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    foreach ($k in $keys) {
+      Get-ItemProperty $k -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like '*WorkBuddy*' -and $_.InstallLocation } |
+        ForEach-Object {
+          $p = Join-Path $_.InstallLocation 'WorkBuddy.exe'
+          if (Test-Path -LiteralPath $p) { return $p }
+        }
+    }
+  } catch {}
+  Fail "Could not find WorkBuddy.exe. Set `$env:WORKBUDDY_EXE, pass the path, or install WorkBuddy first."
 }
 
 function Find-Node {
+  # 1) node on PATH
+  $inPath = Get-Command node -ErrorAction SilentlyContinue
+  if ($inPath) { return $inPath.Source }
+  # 2) WorkBuddy-bundled node
   $candidates = @(
     (Join-Path $env:LOCALAPPDATA "Programs\WorkBuddy\resources\cli\vendor\node\*.\bin\node.exe"),
     "$env:LOCALAPPDATA\Programs\WorkBuddy\resources\cli\vendor\node\node.exe"
   )
   foreach ($c in $candidates) { $m = Get-ChildItem -Path $c -ErrorAction SilentlyContinue | Select-Object -First 1; if ($m -and (Test-Path $m.FullName)) { return $m.FullName } }
-  $inPath = Get-Command node -ErrorAction SilentlyContinue
-  if ($inPath) { return $inPath.Source }
-  Fail "No Node.js found for the injector."
+  # 3) managed Node versions (~/.workbuddy/binaries/node/versions/*, newest first)
+  $managedRoot = Join-Path $env:USERPROFILE '.workbuddy\binaries\node\versions'
+  if (Test-Path -LiteralPath $managedRoot) {
+    $dirs = Get-ChildItem $managedRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+    foreach ($d in $dirs) {
+      $exe = Join-Path $d.FullName 'node.exe'
+      if (Test-Path -LiteralPath $exe) { return $exe }
+    }
+  }
+  Fail "No Node.js found. Install Node >= 20, or ensure WorkBuddy's bundled node exists."
 }
 
+# Verify the loopback CDP endpoint belongs to WorkBuddy (not any random CDP
+# process): require a page target whose URL matches the renderer entry document.
 function Port-BelongsToWorkBuddy($port) {
-  try { $r = Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/version" -TimeoutSec 1; return $true } catch { return $false }
+  try {
+    $r = Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 1
+    return [bool]($r | Where-Object { $_.type -eq 'page' -and $_.url -like '*renderer/index.html*' })
+  } catch { return $false }
 }
 
 function Wait-For-CDP($port, $timeoutSec = 45) {

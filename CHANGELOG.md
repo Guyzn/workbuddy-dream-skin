@@ -19,6 +19,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **Windows discovery hardened** (`common-windows.ps1`): WorkBuddy.exe now
+  resolves via explicit env override → known install paths → Windows Uninstall
+  registry (HKCU/HKLM/WOW6432Node); Node.js resolves via PATH → WorkBuddy-bundled
+  → managed `~/.workbuddy/binaries/node/versions` (newest first). CDP liveness
+  check now requires a `renderer/index.html` page target instead of any HTTP
+  response, so a random CDP process on the port no longer false-positives.
+- New `find-workbuddy.ps1` diagnostic: prints resolved WorkBuddy.exe / Node /
+  CDP status with actionable hints.
 - **Hardened CDP client** (`injector.mjs`): loopback URL validation, port
   validation, connect/command timeouts, pending-request cleanup on terminate,
   typed errors (`CdpProtocolError` / `CdpEvaluationError`), defensive
