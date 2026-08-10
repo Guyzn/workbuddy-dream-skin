@@ -48,3 +48,19 @@ powershell -ExecutionPolicy Bypass -File .\tray-dream-skin.ps1
 
 Full details, knobs and troubleshooting are in `README.md` (Chinese).
 License: MIT (see `LICENSE`). Trademark and asset rights: see `NOTICE.md`.
+
+## Acknowledgements
+
+This project did not appear out of thin air. While building it we studied
+[workbuddy-skin-studio](https://github.com/cdredfox/workbuddy-skin-studio), a
+kindred project by cdredfox. A few ideas came straight from it
+
+- the in-app theme menu (instant switching, custom image import, local saving)
+- CDP client hardening (loopback whitelist, connect timeouts, typed errors)
+- locating WorkBuddy through the Windows Uninstall registry
+- schema validation for theme.json plus path-escape protection
+
+We kept our own machinery (MutationObserver keep-alive, canvas-derived adaptive
+palette, layered scrims and blur, the state-machine daemon) and grew a fuller
+skin experience on top. That is how open source works, you study someone
+else's road and then keep walking your own.

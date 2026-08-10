@@ -147,6 +147,17 @@ npm run check:schema # 校验 macos/presets/ 下所有 theme.json 符合 schema
 
 `schemas/theme.schema.json` 定义了 `theme.json` 的字段契约。注入器在应用主题时会先校验，主题不合法会直接报错，不会静默生效。`injector.mjs` 现在只做编排，CDP 传输层抽到了 `cdp-client.mjs`，主题校验抽到了 `theme-schema.mjs`。
 
+## 致谢
+
+这个项目不是凭空长出来的。做的时候对照过 [workbuddy-skin-studio](https://github.com/cdredfox/workbuddy-skin-studio)，一个思路相近的同类作品，作者是 cdredfox。它给了我们不少启发，直接借鉴过来的东西包括
+
+- 🎨 注入式主题菜单的思路（即时切换、自定义图片导入、本地保存）
+- CDP 客户端的校验与超时工程化（回环地址白名单、连接超时、错误分类）
+- Windows 下用注册表探测 WorkBuddy 安装位置的套路
+- theme.json 加 schema 校验、路径防逃逸的做法
+
+我们保留了自家那套机制（MutationObserver 保活、Canvas 取色生成自适应调色板、分级遮罩与磨砂、状态机守护），在上面长出了更完整的皮肤体验。开源就是这样，互相看着对方的路，各自往前走。
+
 ## 许可
 
 MIT，见 `LICENSE`。商标与素材权利见 `NOTICE.md`。
