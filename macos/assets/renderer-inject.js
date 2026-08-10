@@ -1,9 +1,11 @@
-((cssText, artSpec, themeConfig) => {
+((cssText, artSpec, themeConfig, menuData) => {
   const STATE_KEY = "__WORKBUDDY_DREAM_SKIN_STATE__";
   const DISABLED_KEY = "__WORKBUDDY_DREAM_SKIN_DISABLED__";
   const STYLE_ID = "workbuddy-dream-skin-style";
   const CHROME_ID = "workbuddy-dream-skin-chrome";
   const OP_UI_TAG = "workbuddy-dream-skin-operation";
+  const MENU_ROOT_ID = "workbuddy-dream-skin-menu";
+  const MENU_STORAGE_KEY = "workbuddyDreamSkinCustom";
   const SHELL_ATTR = "data-dream-shell";
   const ART_ATTRS = [
     "data-dream-art-wide", "data-dream-art-safe", "data-dream-task-mode",
@@ -13,9 +15,11 @@
   const VERSION = __DREAM_SKIN_VERSION_JSON__;
   const STYLE_REVISION = __DREAM_SKIN_STYLE_REVISION_JSON__;
   const PAYLOAD_REVISION = __DREAM_SKIN_PAYLOAD_REVISION_JSON__;
-  const THEME = themeConfig && typeof themeConfig === "object" ? themeConfig : {};
-  const ART = THEME.art && typeof THEME.art === "object" ? THEME.art : {};
+  let THEME = themeConfig && typeof themeConfig === "object" ? themeConfig : {};
+  let ART = THEME.art && typeof THEME.art === "object" ? THEME.art : {};
   const ART_METADATA = THEME.artMetadata && typeof THEME.artMetadata === "object" ? THEME.artMetadata : null;
+  // Menu data: [{ id, name, theme, artSpec }] from the Node side.
+  let MENU_ENTRIES = Array.isArray(menuData) ? menuData.filter((e) => e && e.id && typeof e.theme === "object") : [];
   const ANALYSIS_CACHE_KEY = "__WORKBUDDY_DREAM_SKIN_ANALYSIS_CACHE__";
   const THEME_VARIABLES = [
     "--ds-bg", "--ds-panel", "--ds-panel-2", "--ds-green", "--ds-lime",
@@ -45,8 +49,11 @@
   let artUrl = null;
   let artCss = null;
   let isImage = false;
-  if (typeof artSpec === "string") {
-    const trimmed = artSpec.trim();
+  const resolveArt = (spec) => {
+    if (artUrl) { try { URL.revokeObjectURL(artUrl); } catch {} }
+    artUrl = null; artCss = null; isImage = false;
+    if (typeof spec !== "string") return;
+    const trimmed = spec.trim();
     if (/^data:image\//.test(trimmed)) {
       isImage = true;
       try {
@@ -62,7 +69,8 @@
     } else if (trimmed.length) {
       artCss = `linear-gradient(135deg, ${trimmed.split(/[\s,]+/).join(", ")})`;
     }
-  }
+  };
+  resolveArt(artSpec);
 
   if (previous?.observer) previous.observer.disconnect();
   if (previous?.rootObserver) previous.rootObserver.disconnect();
@@ -175,6 +183,7 @@
   };
 
   // Map the dream-skin palette onto VS Code / WorkBuddy surface + accent variables.
+  const recordedVscodeKeys = new Set();
   const applyTheme = (root, shell) => {
     const colors = THEME.colors || {};
     const explicit = new Set(Array.isArray(THEME.explicitColorKeys) ? THEME.explicitColorKeys : []);
@@ -240,7 +249,7 @@
       "--vscode-widget-shadow": "rgba(0,0,0,0.36)",
       "--vscode-commandCenter-activeBackground": surface("panelAlt"),
     };
-    for (const [name, value] of Object.entries(vscode)) setStyleProperty(root, name, value);
+    for (const [name, value] of Object.entries(vscode)) { recordedVscodeKeys.add(name); setStyleProperty(root, name, value); }
     // Internal dream-skin vars.
     const dsVars = {
       "--ds-bg": pick("background"), "--ds-panel": pick("panel"), "--ds-panel-2": pick("panelAlt"),
@@ -425,7 +434,7 @@
     for (const name of ART_ATTRS) root?.removeAttribute(name);
     for (const name of THEME_VARIABLES) root?.style.removeProperty(name);
     // Restore VS Code variables by removing our overrides (revert to app defaults).
-    for (const name of Object.keys(state?.vscodeKeys || {})) root?.style.removeProperty(name);
+    for (const name of recordedVscodeKeys) root?.style.removeProperty(name);
     document.querySelectorAll(".dream-skin-home").forEach((n) => n.classList.remove("dream-skin-home"));
     document.getElementById(STYLE_ID)?.remove();
     document.getElementById(CHROME_ID)?.remove();
@@ -438,8 +447,260 @@
     if (state?.resizeHandler) window.removeEventListener("resize", state.resizeHandler);
     if (state?.mediaHandler && state?.mediaQuery) { try { state.mediaQuery.removeEventListener("change", state.mediaHandler); } catch {} }
     if (artUrl) URL.revokeObjectURL(artUrl);
+    document.getElementById(MENU_ROOT_ID)?.remove();
     delete window[STATE_KEY];
     return true;
+  };
+
+  // ---- In-app 🎨 theme menu (ported concept: instant switching + custom upload) ----
+  let menuRows = new Map(); // id -> { row, dot, nameEl }
+  let customEntry = null;   // { id, name, theme, artSpec } persisted in localStorage
+
+  const hex = (r, g, b) => "#" + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+  const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+
+  // Simplified palette extractor for uploaded images (24-bin hue weighting, like the
+  // built-in analyzeArt but self-contained and sync so the menu can paint instantly).
+  const extractPalette = (image) => {
+    const maxDim = 96;
+    const ratio = image.naturalWidth / image.naturalHeight;
+    const w = Math.max(16, Math.round(ratio >= 1 ? maxDim : maxDim * ratio));
+    const h = Math.max(16, Math.round(ratio >= 1 ? maxDim / ratio : maxDim));
+    const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(image, 0, 0, w, h);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    const bins = new Array(24).fill(0).map(() => ({ weight: 0, r: 0, g: 0, b: 0 }));
+    let lumSum = 0, count = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      const r = px[i], g = px[i + 1], b = px[i + 2];
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      lumSum += lum; count += 1;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const sat = max === 0 ? 0 : (max - min) / max;
+      if (sat < 0.18 || lum < 24 || lum > 245) continue;
+      const d = max - min || 1;
+      let h2 = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      const bucket = Math.round(h2) % 6 * 2 + (sat > 0.55 ? 1 : 0);
+      const weight = sat * sat;
+      bins[bucket].weight += weight; bins[bucket].r += r * weight; bins[bucket].g += g * weight; bins[bucket].b += b * weight;
+    }
+    const avgLum = count ? lumSum / count : 128;
+    const ranked = bins.filter((b) => b.weight > 0).sort((a, b2) => b2.weight - a.weight);
+    const accent = ranked[0] ? [ranked[0].r / ranked[0].weight, ranked[0].g / ranked[0].weight, ranked[0].b / ranked[0].weight] : [36, 201, 215];
+    const light = avgLum > 128;
+    const surface = light ? mix(accent, [252, 252, 255], 0.92) : mix(accent, [12, 12, 18], 0.86);
+    const text = light ? mix(accent, [16, 24, 40], 0.82) : mix(accent, [244, 246, 252], 0.85);
+    return {
+      accent: hex(...accent),
+      surface: hex(...surface),
+      text: hex(...text),
+      accentRgb: { r: accent[0], g: accent[1], b: accent[2] },
+    };
+  };
+
+  // Switch the live skin to another menu entry (bundled preset or custom upload).
+  const setTheme = (entry) => {
+    if (!entry || typeof entry.theme !== "object" || window[DISABLED_KEY]) return false;
+    THEME = entry.theme || {};
+    ART = THEME.art && typeof THEME.art === "object" ? THEME.art : {};
+    resolveArt(entry.artSpec);
+    artAnalysis = null;
+    if (typeof THEME.artKey === "string") {
+      const cached = analysisCache.get(THEME.artKey) ?? null;
+      if (cached) artAnalysis = cached;
+    }
+    const state = window[STATE_KEY];
+    if (state) { state.artUrl = artUrl; state.themeId = THEME.id || "custom"; state.analysis = artAnalysis; }
+    ensure({ root: true, route: true });
+    paintMenu(entry.id);
+    if (isImage && !artAnalysis) {
+      analyzeArt().then((analysis) => {
+        const st = window[STATE_KEY];
+        if (!analysis || st?.installToken !== installToken || window[DISABLED_KEY]) return;
+        artAnalysis = analysis; st.analysis = analysis;
+        if (typeof THEME.artKey === "string") { analysisCache.set(THEME.artKey, analysis); while (analysisCache.size > 8) analysisCache.delete(analysisCache.keys().next().value); }
+        ensure({ root: true, route: false });
+      }).catch(() => {});
+    }
+    return true;
+  };
+
+  const paintMenu = (activeId) => {
+    for (const [id, r] of menuRows) {
+      r.row.style.background = id === activeId ? "rgba(36,201,215,.16)" : "transparent";
+      r.row.style.fontWeight = id === activeId ? "700" : "500";
+    }
+  };
+
+  const clearThemeToNative = () => { cleanup(); };
+
+  const loadCustom = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MENU_STORAGE_KEY) ?? "null");
+      return saved && saved.id && saved.theme && saved.artSpec ? saved : null;
+    } catch { return null; }
+  };
+  const saveCustom = (entry) => {
+    try { localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify(entry)); }
+    catch (error) { console.warn("WorkBuddy Dream Skin：自定义主题过大，本次生效但重启后不保留", error); }
+  };
+  const deleteCustom = () => {
+    try { localStorage.removeItem(MENU_STORAGE_KEY); } catch {}
+    if (window[STATE_KEY] && window[STATE_KEY].themeId === "custom-upload") clearTheme();
+    menuRows.get("custom-upload")?.row?.remove();
+    menuRows.delete("custom-upload");
+    customEntry = null;
+  };
+  const ensureCustomRow = (entry) => {
+    if (menuRows.has("custom-upload")) {
+      const r = menuRows.get("custom-upload");
+      r.nameEl.textContent = entry.name;
+      r.dot.style.background = entry.theme.colors?.accent || "#24c9d7";
+      return;
+    }
+    const rowEl = makeMenuRow(entry.name, entry.theme.colors?.accent || "#24c9d7", () => { setTheme(entry); togglePanel(false); }, true);
+    menuRows.set("custom-upload", rowEl);
+    customEntry = entry;
+  };
+
+  const importFromDataUrl = (dataUrl, name) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, 1600 / img.width);
+        const full = document.createElement("canvas");
+        full.width = Math.round(img.width * scale); full.height = Math.round(img.height * scale);
+        full.getContext("2d").drawImage(img, 0, 0, full.width, full.height);
+        const webp = full.toDataURL("image/webp", 0.82);
+        const palette = extractPalette(img);
+        const entry = {
+          id: "custom-upload",
+          name: name || "我的图片",
+          artSpec: webp,
+          theme: {
+            id: "custom-upload", name: name || "我的图片",
+            appearance: "auto",
+            art: { file: null, focusX: 0.5, focusY: 0.5, safeArea: "center", taskMode: "auto" },
+            colors: { accent: palette.accent, surface: palette.surface, text: palette.text },
+            explicitColorKeys: ["accent", "surface", "text"],
+          },
+        };
+        saveCustom(entry);
+        ensureCustomRow(entry);
+        setTheme(entry);
+        togglePanel(false);
+        resolve(palette);
+      } catch (error) { reject(error); }
+    };
+    img.onerror = () => reject(new Error("图片读取失败"));
+    img.src = dataUrl;
+  });
+
+  let panelOpen = false;
+  const togglePanel = (force) => {
+    const panel = document.getElementById(MENU_ROOT_ID)?.querySelector?.(".dream-skin-menu-panel");
+    if (!panel) return;
+    panelOpen = typeof force === "boolean" ? force : !panelOpen;
+    panel.style.display = panelOpen ? "block" : "none";
+  };
+
+  const makeMenuRow = (label, dotColor, onPick, withDelete) => {
+    const item = document.createElement("div");
+    item.style.cssText = "display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;";
+    const dot = document.createElement("span");
+    dot.style.cssText = `width:10px;height:10px;border-radius:50%;flex:none;background:${dotColor};`;
+    const text = document.createElement("span");
+    text.textContent = label;
+    text.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    item.append(dot, text);
+    item.addEventListener("mouseenter", () => { if (item.style.fontWeight !== "700") item.style.background = "rgba(0,0,0,.05)"; });
+    item.addEventListener("mouseleave", () => paintMenu(window[STATE_KEY]?.themeId ?? null));
+    item.addEventListener("click", () => onPick(item));
+    if (withDelete) {
+      const del = document.createElement("span");
+      del.textContent = "\u00d7";
+      del.title = "删除自定义主题";
+      del.style.cssText = "flex:none;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;color:rgba(0,0,0,.45);font-size:14px;";
+      del.addEventListener("mouseenter", () => { del.style.background = "rgba(220,60,60,.15)"; del.style.color = "#c03030"; });
+      del.addEventListener("mouseleave", () => { del.style.background = "transparent"; del.style.color = "rgba(0,0,0,.45)"; });
+      del.addEventListener("click", (event) => { event.stopPropagation(); deleteCustom(); });
+      item.appendChild(del);
+    }
+    return { row: item, dot, nameEl: text };
+  };
+
+  const mountMenu = () => {
+    document.getElementById(MENU_ROOT_ID)?.remove();
+    if (window[DISABLED_KEY]) return;
+    const root = document.createElement("div");
+    root.id = MENU_ROOT_ID;
+    root.style.cssText = "position:fixed;top:48px;right:16px;z-index:2147483000;font:500 13px/1.4 system-ui;user-select:none;";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "\u{1F3A8}";
+    button.title = "WorkBuddy Dream Skin";
+    button.style.cssText = "display:block;margin-left:auto;width:38px;height:38px;border-radius:50%;border:1px solid rgba(0,0,0,.18);background:rgba(255,255,255,.92);backdrop-filter:blur(10px);box-shadow:0 3px 12px rgba(0,0,0,.24);cursor:pointer;font-size:19px;padding:0;";
+    const panel = document.createElement("div");
+    panel.className = "dream-skin-menu-panel";
+    panel.style.cssText = "display:none;margin-top:8px;min-width:200px;padding:6px;border-radius:12px;border:1px solid rgba(0,0,0,.1);background:rgba(255,255,255,.94);backdrop-filter:blur(16px);box-shadow:0 10px 30px rgba(0,0,0,.18);color:#17344f;";
+
+    menuRows = new Map();
+    for (const entry of MENU_ENTRIES) {
+      const accent = entry.theme?.colors?.accent || "#24c9d7";
+      const r = makeMenuRow(entry.name || entry.id, accent, () => { setTheme(entry); togglePanel(false); });
+      panel.appendChild(r.row);
+      menuRows.set(entry.id, r);
+    }
+
+    const savedCustom = loadCustom();
+    if (savedCustom) ensureCustomRow(savedCustom);
+
+    // Upload row
+    const uploadRow = makeMenuRow("\uff0b \u81ea\u5b9a\u4e49\u56fe\u7247", "rgba(36,201,215,.9)", () => picker.click());
+    uploadRow.row.style.borderTop = "1px solid rgba(0,0,0,.08)";
+    panel.appendChild(uploadRow.row);
+
+    // Native row
+    const nativeRow = makeMenuRow("\u539f\u751f\u754c\u9762", "rgba(0,0,0,.24)", () => { clearThemeToNative(); togglePanel(false); });
+    panel.appendChild(nativeRow.row);
+
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "image/png,image/jpeg,image/webp";
+    picker.style.display = "none";
+    picker.addEventListener("change", () => {
+      const file = picker.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => importFromDataUrl(reader.result, file.name.replace(/\.[a-z0-9]+$/i, ""));
+      reader.readAsDataURL(file);
+      picker.value = "";
+    });
+
+    button.addEventListener("click", () => togglePanel());
+    root.append(button, panel, picker);
+    document.body.appendChild(root);
+    paintMenu(window[STATE_KEY]?.themeId ?? null);
+  };
+
+  const clearTheme = () => {
+    // Full teardown handled by cleanup(); here we only clear CSS vars without
+    // killing the keep-alive so the user can still reopen the menu later.
+    const root = document.documentElement;
+    root?.classList.remove("workbuddy-dream-skin");
+    document.body?.classList.remove("workbuddy-dream-skin", "dream-skin-home");
+    root?.removeAttribute(SHELL_ATTR);
+    for (const name of ART_ATTRS) root?.removeAttribute(name);
+    for (const name of THEME_VARIABLES) root?.style.removeProperty(name);
+    const state = window[STATE_KEY];
+    if (state) for (const name of recordedVscodeKeys) root?.style.removeProperty(name);
+    document.querySelectorAll(".dream-skin-home").forEach((n) => n.classList.remove("dream-skin-home"));
+    document.getElementById(STYLE_ID)?.remove();
+    document.getElementById(CHROME_ID)?.remove();
+    if (state) state.themeId = null;
+    paintMenu(null);
   };
 
   const scheduler = { timeout: null, frame: null, root: false, route: false };
@@ -465,11 +726,13 @@
   try { mediaQuery = window.matchMedia("(prefers-color-scheme: dark)"); mediaHandler = () => scheduleEnsure({ root: true, route: true }); } catch {}
 
   window[STATE_KEY] = {
-    ensure, cleanup, observer, rootObserver, resizeObserver, timer: null, scheduler, resizeHandler, mediaQuery, mediaHandler,
+    ensure, cleanup, setTheme, clearTheme, deleteCustom, mountMenu, importFromDataUrl, menuEntries: MENU_ENTRIES,
+    observer, rootObserver, resizeObserver, timer: null, scheduler, resizeHandler, mediaQuery, mediaHandler,
     artUrl, installToken, analysis: artAnalysis, artMetadata: ART_METADATA, metrics, version: VERSION, themeId: THEME.id || "custom", revision: PAYLOAD_REVISION, detectShellMode,
-    vscodeKeys: {}, // populated below for clean restore
+    vscodeKeys: recordedVscodeKeys,
   };
   ensure({ root: true, route: true });
+  mountMenu();
   observer.observe(document.documentElement, { childList: true, subtree: true });
   rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-appearance", "data-color-mode", "data-vscode-theme-name", "style"] });
   if (document.body) rootObserver.observe(document.body, { attributes: true, attributeFilter: ["class", "data-vscode-theme-name", "style"] });
@@ -487,4 +750,4 @@
     ensure({ root: true, route: false });
   }).catch(() => {});
   return { installed: true, version: VERSION, themeId: THEME.id || "custom", revision: PAYLOAD_REVISION, shell: resolvedShell(), analysis: artAnalysis, artKind: isImage ? "image" : (artCss ? "css" : "none") };
-})(__DREAM_SKIN_CSS_JSON__, __DREAM_SKIN_ART_JSON__, __DREAM_SKIN_THEME_JSON__)
+})(__DREAM_SKIN_CSS_JSON__, __DREAM_SKIN_ART_JSON__, __DREAM_SKIN_THEME_JSON__, __DREAM_SKIN_MENU_JSON__)
