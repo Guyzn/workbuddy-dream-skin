@@ -19,6 +19,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **Hybrid theming layer** (`renderer-inject.js` + `dream-skin.css`): the stable
+  `--vscode-*` base is kept, with a WorkBuddy-specific `--cb-*` increment added
+  (titlebar, dark buttons, scrollbars, strokes, team cards) mapped onto the
+  dream-skin palette; `dream-skin.css` gains a `[data-view-id]` precision anchor
+  layer (sidebar / main-content / detail-panel) that takes precedence, while the
+  heuristic class matchers stay as a degradation fallback. Fixed stale
+  `--ds-*-rgb` cleanup names (accent→green, etc.) so native restore is complete.
 - **Windows discovery hardened** (`common-windows.ps1`): WorkBuddy.exe now
   resolves via explicit env override → known install paths → Windows Uninstall
   registry (HKCU/HKLM/WOW6432Node); Node.js resolves via PATH → WorkBuddy-bundled

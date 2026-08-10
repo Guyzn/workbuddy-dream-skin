@@ -24,8 +24,8 @@
   const THEME_VARIABLES = [
     "--ds-bg", "--ds-panel", "--ds-panel-2", "--ds-green", "--ds-lime",
     "--ds-cyan", "--ds-purple", "--ds-text", "--ds-muted", "--ds-line",
-    "--ds-bg-rgb", "--ds-panel-rgb", "--ds-panel-2-rgb", "--ds-accent-rgb",
-    "--ds-accent-alt-rgb", "--ds-secondary-rgb", "--ds-highlight-rgb",
+    "--ds-bg-rgb", "--ds-panel-rgb", "--ds-panel-2-rgb", "--ds-green-rgb",
+    "--ds-lime-rgb", "--ds-cyan-rgb", "--ds-purple-rgb",
     "--ds-text-rgb", "--ds-muted-rgb", "--ds-line-rgb",
     "--dream-skin-art", "--dream-art-focus-x", "--dream-art-focus-y",
     "--dream-art-position", "--dream-skin-focus-x", "--dream-skin-focus-y",
@@ -250,6 +250,53 @@
       "--vscode-commandCenter-activeBackground": surface("panelAlt"),
     };
     for (const [name, value] of Object.entries(vscode)) { recordedVscodeKeys.add(name); setStyleProperty(root, name, value); }
+    // WorkBuddy-specific --cb-* increments (the stable --vscode-* layer above stays
+    // as the general base; these cover WorkBuddy's own design variables: titlebar,
+    // dark buttons, scrollbars, borders/markdown rules, team cards, etc.).
+    const cb = {
+      // surfaces
+      "--cb-bg-primary": pick("background"),
+      "--cb-bg-secondary": toRgba(pick("background"), 0.94),
+      "--cb-panel-bg-primary": toRgba(pick("panel"), 0.88),
+      "--cb-team-member-card-background": toRgba(pick("panel"), 0.88),
+      // text
+      "--cb-text-primary": pick("text"),
+      "--cb-text-secondary": toRgba(pick("text"), 0.70),
+      "--cb-text-disabled": toRgba(pick("text"), 0.42),
+      "--cb-text-link": accentAlt,
+      "--cb-text-error-active": accent,
+      // VS Code theme-color wrappers
+      "--cb-vscode-editor-background": pick("background"),
+      "--cb-vscode-sideBar-background": toRgba(pick("panel"), 0.90),
+      "--cb-vscode-foreground": pick("text"),
+      "--cb-vscode-editor-foreground": pick("text"),
+      "--cb-vscode-descriptionForeground": toRgba(pick("text"), 0.70),
+      "--cb-vscode-titleBar-activeBackground": surface("background"),
+      "--cb-vscode-titleBar-activeForeground": pick("text"),
+      "--cb-vscode-titleBar-inactiveBackground": toRgba(pick("background"), 0.8),
+      "--cb-vscode-titleBar-inactiveForeground": toRgba(pick("text"), 0.7),
+      "--cb-titlebar-control-hover-background": toRgba(accent, 0.16),
+      "--cb-vscode-input-background": toRgba(pick("panelAlt"), 0.88),
+      "--cb-vscode-dropdown-background": toRgba(pick("panelAlt"), 0.94),
+      "--cb-vscode-list-hoverBackground": toRgba(accent, 0.16),
+      "--cb-vscode-toolbar-hoverBackground": toRgba(accent, 0.16),
+      "--cb-vscode-scrollbarSlider-background": toRgba(accent, 0.30),
+      "--cb-vscode-scrollbarSlider-hoverBackground": toRgba(accent, 0.50),
+      "--cb-vscode-textLink-foreground": accentAlt,
+      "--cb-vscode-widget-border": toRgba(accent, 0.45),
+      "--cb-vscode-panel-border": toRgba(accent, 0.30),
+      // buttons
+      "--cb-button-dark-background": accent,
+      "--cb-button-dark-foreground": shell === "light" ? "#ffffff" : "#0c0d10",
+      "--cb-button-dark-hover-background": accentAlt,
+      "--cb-vscode-button-background": accent,
+      "--cb-vscode-button-foreground": shell === "light" ? "#ffffff" : "#0c0d10",
+      "--cb-vscode-button-hoverBackground": accentAlt,
+      // strokes
+      "--cb-stroke-secondary": toRgba(accent, 0.45),
+      "--cb-markdown-hr-border-color": toRgba(accent, 0.30),
+    };
+    for (const [name, value] of Object.entries(cb)) { recordedVscodeKeys.add(name); setStyleProperty(root, name, value); }
     // Internal dream-skin vars.
     const dsVars = {
       "--ds-bg": pick("background"), "--ds-panel": pick("panel"), "--ds-panel-2": pick("panelAlt"),

@@ -84,6 +84,31 @@ body.workbuddy-dream-skin {
   -webkit-backdrop-filter: blur(var(--dream-blur, 22px)) saturate(1.08);
 }
 
+/* Precision layer: [data-view-id] anchors (WorkBuddy DOM ids) take precedence
+ * over the heuristic class matchers above. If WorkBuddy renames a view id, the
+ * heuristic layer below still catches the region — the skin degrades instead of
+ * breaking. */
+.workbuddy-dream-skin [data-view-id] {
+  background: transparent !important;
+}
+.workbuddy-dream-skin [data-view-id="sidebar"] {
+  background: color-mix(in srgb, var(--ds-panel, #f2f5fa) 88%, transparent) !important;
+  border-right: 1px solid color-mix(in srgb, var(--ds-green-rgb, 36 201 215) 45%, transparent) !important;
+  backdrop-filter: blur(var(--dream-blur, 22px)) saturate(1.12);
+  -webkit-backdrop-filter: blur(var(--dream-blur, 22px)) saturate(1.12);
+}
+.workbuddy-dream-skin [data-view-id="main-content"] {
+  background: linear-gradient(180deg,
+    transparent 0 40%,
+    color-mix(in srgb, var(--ds-bg, #f7f9fc) 74%, transparent) 100%) !important;
+}
+.workbuddy-dream-skin [data-view-id="detail-panel"],
+.workbuddy-dream-skin [data-view-id="chat-panel"] {
+  background: color-mix(in srgb, var(--ds-panel, #f2f5fa) 88%, transparent) !important;
+  backdrop-filter: blur(calc(var(--dream-blur, 22px) * 0.85)) saturate(1.08);
+  -webkit-backdrop-filter: blur(calc(var(--dream-blur, 22px) * 0.85)) saturate(1.08);
+}
+
 /* Home route: ease the scrim so the artwork breathes. */
 .workbuddy-dream-skin.dream-skin-home body::after {
   opacity: var(--dream-home-scrim, 0.30);
