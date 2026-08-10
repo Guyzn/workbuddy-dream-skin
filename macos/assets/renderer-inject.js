@@ -122,6 +122,40 @@
   };
   const luminance = ({ r, g, b }) => { const lin = [r, g, b].map((c) => { const x = c/255; return x <= 0.03928 ? x/12.92 : ((x+0.055)/1.055)**2.4; }); return 0.2126*lin[0] + 0.7152*lin[1] + 0.0722*lin[2]; };
 
+  // Shared image analysis (used by both analyzeArt and the menu's extractPalette):
+  // downscale to a small canvas, quantize hues into 24 weighted bins, and return
+  // the dominant accent RGB plus luminance statistics. Throws on unusable input.
+  const analyzeImage = (image, { maxDim = 96 } = {}) => {
+    const ratio = image.naturalWidth / image.naturalHeight;
+    if (!Number.isFinite(ratio) || ratio <= 0) throw new Error("bad dims");
+    const w = Math.max(16, Math.round(ratio >= 1 ? maxDim : maxDim * ratio));
+    const h = Math.max(16, Math.round(ratio >= 1 ? maxDim / ratio : maxDim));
+    const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext?.("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("no canvas");
+    ctx.drawImage(image, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const bins = Array.from({ length: 24 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
+    let lightTotal = 0, count = 0;
+    const samples = new Array(w * h);
+    for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
+      const o = (y * w + x) * 4; if (data[o + 3] < 32) continue;
+      const rgb = { r: data[o], g: data[o + 1], b: data[o + 2] };
+      const light = (0.2126*rgb.r + 0.7152*rgb.g + 0.0722*rgb.b) / 255;
+      const hsl = rgbToHsl(rgb); samples[y*w + x] = { light, s: hsl.s };
+      lightTotal += light; count += 1;
+      if (hsl.s >= 0.16 && hsl.l >= 0.16 && hsl.l <= 0.86) {
+        const bin = bins[Math.min(23, Math.floor(hsl.h / 15))];
+        const weight = hsl.s * (1 - Math.abs(hsl.l - 0.52) * 0.85);
+        bin.weight += weight; bin.r += rgb.r * weight; bin.g += rgb.g * weight; bin.b += rgb.b * weight;
+      }
+    }
+    if (!count) throw new Error("empty");
+    const accentBin = bins.reduce((b, c) => c.weight > b.weight ? c : b, bins[0]);
+    const accentRgb = accentBin.weight > 0 ? { r: accentBin.r/accentBin.weight, g: accentBin.g/accentBin.weight, b: accentBin.b/accentBin.weight } : null;
+    return { w, h, samples, brightness: lightTotal / count, accentRgb };
+  };
+
   // WorkBuddy shell detection: data-vscode-theme-name, VS Code color-scheme, classes, media.
   const detectShellMode = () => {
     const root = document.documentElement, body = document.body;
@@ -350,40 +384,13 @@
     image.onerror = () => finish(null);
     image.onload = () => {
       try {
+        const { w, h, samples, brightness, accentRgb } = analyzeImage(image);
         const ratio = image.naturalWidth / image.naturalHeight;
-        if (!Number.isFinite(ratio) || ratio <= 0) throw new Error("bad dims");
-        const maxDim = 96;
-        const w = Math.max(16, Math.round(ratio >= 1 ? maxDim : maxDim * ratio));
-        const h = Math.max(16, Math.round(ratio >= 1 ? maxDim / ratio : maxDim));
-        const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext?.("2d", { willReadFrequently: true });
-        if (!ctx) throw new Error("no canvas");
-        ctx.drawImage(image, 0, 0, w, h);
-        const data = ctx.getImageData(0, 0, w, h).data;
-        const bins = Array.from({ length: 24 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
-        let lightTotal = 0, count = 0;
-        const samples = new Array(w * h);
-        for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
-          const o = (y * w + x) * 4; if (data[o + 3] < 32) continue;
-          const rgb = { r: data[o], g: data[o + 1], b: data[o + 2] };
-          const light = (0.2126*rgb.r + 0.7152*rgb.g + 0.0722*rgb.b) / 255;
-          const hsl = rgbToHsl(rgb); samples[y*w + x] = { light, s: hsl.s };
-          lightTotal += light; count += 1;
-          if (hsl.s >= 0.16 && hsl.l >= 0.16 && hsl.l <= 0.86) {
-            const bin = bins[Math.min(23, Math.floor(hsl.h / 15))];
-            const weight = hsl.s * (1 - Math.abs(hsl.l - 0.52) * 0.85);
-            bin.weight += weight; bin.r += rgb.r * weight; bin.g += rgb.g * weight; bin.b += rgb.b * weight;
-          }
-        }
-        if (!count) throw new Error("empty");
-        const brightness = lightTotal / count;
         const info = (s, e) => { let t = 0, sq = 0, p = 0; for (let y = 0; y < h; y += 1) for (let x = s; x < e; x += 1) { const sm = samples[y*w + x]; if (!sm) continue; t += sm.light; sq += sm.light*sm.light; p += 1; } const m = p ? t/p : 0; return Math.sqrt(Math.max(0, sq/p - m*m)); };
         const zw = Math.max(1, Math.floor(w * 0.38));
         const leftI = info(0, zw), rightI = info(w - zw, w);
         let safeArea = "center";
         if (leftI < rightI * 0.86) safeArea = "left"; else if (rightI < leftI * 0.86) safeArea = "right";
-        const accentBin = bins.reduce((b, c) => c.weight > b.weight ? c : b, bins[0]);
-        const accentRgb = accentBin.weight > 0 ? { r: accentBin.r/accentBin.weight, g: accentBin.g/accentBin.weight, b: accentBin.b/accentBin.weight } : null;
         const aspect = ratio >= 2.25 ? "ultrawide" : ratio >= 1.45 ? "wide" : ratio >= 1.08 ? "landscape" : ratio >= 0.9 ? "square" : "portrait";
         finish({ width: image.naturalWidth, height: image.naturalHeight, ratio, wide: ratio >= 1.75, aspect, brightness, shell: brightness >= 0.58 ? "light" : "dark", safeArea, focusX: 0.5, focusY: 0.5, taskMode: ratio >= 2.25 ? "banner" : "ambient", accentRgb });
       } catch { finish(null); }
@@ -495,6 +502,10 @@
     if (state?.mediaHandler && state?.mediaQuery) { try { state.mediaQuery.removeEventListener("change", state.mediaHandler); } catch {} }
     if (artUrl) URL.revokeObjectURL(artUrl);
     document.getElementById(MENU_ROOT_ID)?.remove();
+    // Null out observer/timer references held by the state object so the garbage
+    // collector can reclaim the MutationObservers and any captured closures.
+    if (state) { state.observer = null; state.rootObserver = null; state.resizeObserver = null; state.timer = null; state.scheduler = null; }
+    observer = null; rootObserver = null; resizeObserver = null; menuRows = null;
     delete window[STATE_KEY];
     return true;
   };
@@ -506,43 +517,20 @@
   const hex = (r, g, b) => "#" + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
   const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
-  // Simplified palette extractor for uploaded images (24-bin hue weighting, like the
-  // built-in analyzeArt but self-contained and sync so the menu can paint instantly).
+  // Simplified palette for uploaded images: reuse the shared analyzeImage (same
+  // 24-bin hue weighting as analyzeArt) and derive a readable accent/surface/text
+  // trio. Kept sync so the menu can paint instantly.
   const extractPalette = (image) => {
-    const maxDim = 96;
-    const ratio = image.naturalWidth / image.naturalHeight;
-    const w = Math.max(16, Math.round(ratio >= 1 ? maxDim : maxDim * ratio));
-    const h = Math.max(16, Math.round(ratio >= 1 ? maxDim / ratio : maxDim));
-    const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(image, 0, 0, w, h);
-    const px = ctx.getImageData(0, 0, w, h).data;
-    const bins = new Array(24).fill(0).map(() => ({ weight: 0, r: 0, g: 0, b: 0 }));
-    let lumSum = 0, count = 0;
-    for (let i = 0; i < px.length; i += 4) {
-      const r = px[i], g = px[i + 1], b = px[i + 2];
-      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      lumSum += lum; count += 1;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      const sat = max === 0 ? 0 : (max - min) / max;
-      if (sat < 0.18 || lum < 24 || lum > 245) continue;
-      const d = max - min || 1;
-      let h2 = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-      const bucket = Math.round(h2) % 6 * 2 + (sat > 0.55 ? 1 : 0);
-      const weight = sat * sat;
-      bins[bucket].weight += weight; bins[bucket].r += r * weight; bins[bucket].g += g * weight; bins[bucket].b += b * weight;
-    }
-    const avgLum = count ? lumSum / count : 128;
-    const ranked = bins.filter((b) => b.weight > 0).sort((a, b2) => b2.weight - a.weight);
-    const accent = ranked[0] ? [ranked[0].r / ranked[0].weight, ranked[0].g / ranked[0].weight, ranked[0].b / ranked[0].weight] : [36, 201, 215];
-    const light = avgLum > 128;
+    const { brightness, accentRgb } = analyzeImage(image);
+    const accent = accentRgb ? [accentRgb.r, accentRgb.g, accentRgb.b] : [36, 201, 215];
+    const light = brightness > 0.5;
     const surface = light ? mix(accent, [252, 252, 255], 0.92) : mix(accent, [12, 12, 18], 0.86);
     const text = light ? mix(accent, [16, 24, 40], 0.82) : mix(accent, [244, 246, 252], 0.85);
     return {
       accent: hex(...accent),
       surface: hex(...surface),
       text: hex(...text),
-      accentRgb: { r: accent[0], g: accent[1], b: accent[2] },
+      accentRgb: accentRgb || { r: accent[0], g: accent[1], b: accent[2] },
     };
   };
 
@@ -765,7 +753,7 @@
     if (typeof requestAnimationFrame === "function") { scheduler.frame = requestAnimationFrame(flush); scheduler.timeout = setTimeout(flush, 96); }
     else scheduler.timeout = setTimeout(flush, 64);
   };
-  const observer = new MutationObserver(() => scheduleEnsure({ route: true }));
+  let observer = new MutationObserver(() => scheduleEnsure({ route: true }));
   rootObserver = new MutationObserver(() => { if (samplingNativeShell) return; scheduleEnsure({ root: true, route: true }); });
   const resizeHandler = () => scheduleEnsure({ route: true });
   if (typeof ResizeObserver === "function") resizeObserver = new ResizeObserver(() => scheduleEnsure({ route: true }));

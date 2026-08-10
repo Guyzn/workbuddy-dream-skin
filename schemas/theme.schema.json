@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Guyzn/workbuddy-dream-skin/schemas/theme.schema.json",
+  "title": "WorkBuddy Dream Skin theme.json",
+  "description": "Schema for WorkBuddy Dream Skin theme.json files (bundled presets and installed themes).",
+  "type": "object",
+  "required": ["id", "name"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9_-]+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "brandSubtitle": { "type": "string" },
+    "statusText": { "type": "string" },
+    "quote": { "type": "string" },
+    "appearance": { "enum": ["auto", "light", "dark"] },
+    "artKey": { "type": "string" },
+    "artMetadata": {
+      "type": "object",
+      "properties": {
+        "safeArea": { "enum": ["left", "right", "center", "none"] },
+        "focusX": { "type": "number", "minimum": 0, "maximum": 1 },
+        "focusY": { "type": "number", "minimum": 0, "maximum": 1 },
+        "taskMode": { "enum": ["ambient", "banner", "off", "auto"] },
+        "wide": { "type": "boolean" },
+        "aspect": { "type": "string" }
+      }
+    },
+    "art": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string" },
+        "css": { "type": "string" },
+        "gradient": { "type": "string" },
+        "focusX": { "type": "number", "minimum": 0, "maximum": 1 },
+        "focusY": { "type": "number", "minimum": 0, "maximum": 1 },
+        "safeArea": { "enum": ["left", "right", "center", "none", "auto"] },
+        "taskMode": { "enum": ["ambient", "banner", "off", "auto"] }
+      }
+    },
+    "colors": {
+      "type": "object",
+      "properties": {
+        "accent": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "accentAlt": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "secondary": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "highlight": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+      }
+    },
+    "explicitColorKeys": { "type": "array", "items": { "type": "string" } },
+    "surfaceAlpha": { "type": "number", "minimum": 0, "maximum": 1 },
+    "blur": { "type": "number", "minimum": 0, "maximum": 64 },
+    "scrim": { "type": "number", "minimum": 0, "maximum": 1 },
+    "homeScrim": { "type": "number", "minimum": 0, "maximum": 1 },
+    "homeSelector": { "type": "string" }
+  },
+  "additionalProperties": true
+}

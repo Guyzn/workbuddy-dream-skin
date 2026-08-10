@@ -1,0 +1,27 @@
+{
+  "name": "workbuddy-dream-skin",
+  "version": "1.0.0",
+  "description": "Reversible theme/skin for the WorkBuddy desktop app via local loopback CDP injection. Never modifies app.asar, the official install directory, or code signing.",
+  "keywords": [
+    "workbuddy",
+    "theme",
+    "skin",
+    "cdp",
+    "chromium-devtools-protocol",
+    "electron"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true,
+  "scripts": {
+    "check": "npm run check:syntax && npm run check:mirror && npm run check:payload",
+    "check:syntax": "node --check macos/scripts/injector.mjs && node --check macos/scripts/cdp-client.mjs && node --check macos/scripts/theme-schema.mjs && bash -n macos/scripts/*.sh && python -m py_compile macos/scripts/gen_presets.py",
+    "check:mirror": "diff macos/scripts/injector.mjs windows/scripts/injector.mjs && diff macos/scripts/cdp-client.mjs windows/scripts/cdp-client.mjs && diff macos/scripts/theme-schema.mjs windows/scripts/theme-schema.mjs && diff macos/assets/dream-skin.css windows/assets/dream-skin.css && diff macos/assets/renderer-inject.js windows/assets/renderer-inject.js",
+    "check:payload": "node macos/scripts/injector.mjs --check-payload --theme-dir macos/presets/preset-aurora-dusk && node macos/scripts/injector.mjs --check-payload --theme-dir macos/presets/preset-midnight-bloom && node macos/scripts/injector.mjs --check-payload --theme-dir macos/presets/preset-ember-zen",
+    "check:schema": "node scripts/check-theme-schemas.mjs",
+    "test": "npm run check"
+  }
+}

@@ -1,0 +1,19 @@
+# This project is consumed by cloning, not by npm publish — but keep the
+# package clean if it ever is published.
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Local state (install target, not source)
+state/
+WorkBuddyDreamSkinStudio/
+
+# Logs & editor cruft
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp

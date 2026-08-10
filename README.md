@@ -142,6 +142,18 @@ scripts/doctor-macos.sh
 
 ---
 
+## 开发者检查
+
+```bash
+npm install         # 无运行时依赖（仅声明 engines）；install 可选
+npm run check       # 语法 + 双平台镜像一致性 + 主题 schema + payload smoke
+npm run check:schema  # 校验 macos/presets/ 下所有 theme.json 符合 schema
+```
+
+新增 `schemas/theme.schema.json` 定义 `theme.json` 的字段契约；注入器在应用时校验主题，非法主题会直接报错而不是静默生效。`injector.mjs` 只负责编排，CDP 传输层抽离为 `cdp-client.mjs`，主题校验抽离为 `theme-schema.mjs`。
+
+---
+
 ## 许可
 
 MIT —— 见 `LICENSE`。商标与素材权利见 `NOTICE.md`。

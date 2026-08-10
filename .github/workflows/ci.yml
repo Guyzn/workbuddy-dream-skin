@@ -23,11 +23,18 @@ jobs:
       - name: Node syntax check (both platform mirrors)
         run: |
           node --check macos/scripts/injector.mjs
+          node --check macos/scripts/cdp-client.mjs
+          node --check macos/scripts/theme-schema.mjs
           node --check windows/scripts/injector.mjs
+          node --check windows/scripts/cdp-client.mjs
+          node --check windows/scripts/theme-schema.mjs
+          node --check scripts/check-theme-schemas.mjs
 
       - name: Mirror consistency check
         run: |
           diff macos/scripts/injector.mjs windows/scripts/injector.mjs
+          diff macos/scripts/cdp-client.mjs windows/scripts/cdp-client.mjs
+          diff macos/scripts/theme-schema.mjs windows/scripts/theme-schema.mjs
           diff macos/assets/dream-skin.css windows/assets/dream-skin.css
           diff macos/assets/renderer-inject.js windows/assets/renderer-inject.js
 
@@ -42,6 +49,10 @@ jobs:
       - name: Shell syntax check (macOS scripts)
         run: |
           for f in macos/scripts/*.sh macos/menubar/*.sh; do bash -n "$f"; done
+
+      - name: Theme schema validation (all bundled presets)
+        run: |
+          node scripts/check-theme-schemas.mjs
 
       - name: Payload build smoke test
         run: |

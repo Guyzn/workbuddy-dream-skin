@@ -33,22 +33,26 @@ powershell -ExecutionPolicy Bypass -File .\tray-dream-skin.ps1
 
 ## Layout
 
-- `macos/scripts/injector.mjs` — CDP client + injector + CLI (zero deps)
+- `macos/scripts/injector.mjs` — CLI orchestrator (apply / verify / restore / inspect / watch / check-payload)
+- `macos/scripts/cdp-client.mjs` — CDP transport (loopback validation, timeouts, typed errors, request queue)
+- `macos/scripts/theme-schema.mjs` — runtime theme.json schema validation
+- `schemas/theme.schema.json` — the theme schema (for editors / CI linters)
 - `macos/assets/dream-skin.css` — injected stylesheet
 - `macos/assets/renderer-inject.js` — in-renderer engine (palette, keep-alive)
 - `macos/presets/` — bundled presets (`theme.json` + `background.jpg`)
 - `macos/scripts/gen_presets.py` — programmatic preset background generator
+- `scripts/check-theme-schemas.mjs` — validates every bundled theme against the schema
 - `windows/` — PowerShell mirror of the macOS scripts
 
 ## Testing
 
-No test framework yet; run the built-in checks:
+No test framework yet; run the built-in checks (or `npm run check`):
 
 ```bash
-node --check macos/scripts/injector.mjs
-bash -n macos/scripts/*.sh
-python -m py_compile macos/scripts/gen_presets.py
-node macos/scripts/injector.mjs --check-payload --theme-dir macos/presets/preset-aurora-dusk
+npm run check:syntax    # node --check + bash -n + py_compile
+npm run check:mirror    # macOS/Windows mirrors identical
+npm run check:schema    # all bundled theme.json valid
+npm run check:payload   # injector --check-payload on every preset
 ```
 
 CI runs these on every push (see `.github/workflows/ci.yml`).

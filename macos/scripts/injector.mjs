@@ -1,8 +1,12 @@
 // WorkBuddy Dream Skin — CDP injector (Node, zero runtime deps; uses global WebSocket/fetch on Node 22+)
+// CDP transport lives in cdp-client.mjs; this file only builds payloads and
+// drives the CLI (apply / verify / restore / inspect / watch / check-payload).
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Cdp, listTargets, pickWorkbuddyTarget } from "./cdp-client.mjs";
+import { validateThemeJson } from "./theme-schema.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const here = path.dirname(scriptPath);
@@ -10,247 +14,10 @@ const assetsDir = path.resolve(here, "..", "assets");
 const root = path.resolve(here, "..", "..");
 
 export const SKIN_VERSION = (await readMaybe(path.join(assetsDir, "..", "VERSION")))?.trim() || "1.0.0";
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const MAX_ART_BYTES = 16 * 1024 * 1024;
 const OP_HOST_ID = "workbuddy-dream-skin-operation";
 
 async function readMaybe(p) { try { return await fs.readFile(p, "utf8"); } catch { return null; } }
-
-// ---- CDP helpers (hardened: port/URL validation, timeouts, error taxonomy) ----
-
-const MIN_PORT = 1024;
-const MAX_PORT = 65535;
-const DEFAULT_DISCOVERY_TIMEOUT_MS = 5000;
-const DEFAULT_CONNECT_TIMEOUT_MS = 5000;
-const DEFAULT_COMMAND_TIMEOUT_MS = 5000;
-
-function validatePort(port) {
-  if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
-    throw new TypeError(`port must be an integer from ${MIN_PORT} through ${MAX_PORT}`);
-  }
-  return port;
-}
-
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-// CDP loopback rule: ws://127.0.0.1 with an explicit port, no credentials/hash.
-function parseLoopbackWebSocketUrl(value) {
-  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
-    throw new TypeError("webSocketDebuggerUrl must be a non-empty URL string");
-  }
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch (error) {
-    throw new TypeError(`webSocketDebuggerUrl is invalid: ${errorMessage(error)}`, { cause: error });
-  }
-  if (
-    parsed.protocol !== "ws:" ||
-    parsed.hostname !== "127.0.0.1" ||
-    parsed.username ||
-    parsed.password ||
-    parsed.hash ||
-    !parsed.port
-  ) {
-    throw new TypeError("webSocketDebuggerUrl must use ws://127.0.0.1 with an explicit port");
-  }
-  validatePort(Number(parsed.port));
-  return parsed;
-}
-
-async function listTargets(port) {
-  validatePort(port);
-  const res = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(DEFAULT_DISCOVERY_TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`/json/list HTTP ${res.status}`);
-  return res.json();
-}
-
-function wsUrlFromTarget(target) {
-  if (typeof target.webSocketDebuggerUrl !== "string") return null;
-  try { parseLoopbackWebSocketUrl(target.webSocketDebuggerUrl); return target.webSocketDebuggerUrl; } catch { return null; }
-}
-
-async function pickWorkbuddyTarget(targets) {
-  const pages = targets.filter((t) => t.type === "page" && wsUrlFromTarget(t));
-  // Prefer the renderer entry document.
-  const entry = pages.find((t) => (t.url || "").includes("renderer/index.html"));
-  if (entry) return entry;
-  const filePage = pages.find((t) => (t.url || "").startsWith("file://"));
-  if (filePage) return filePage;
-  return pages[0] || null;
-}
-
-class CdpError extends Error { constructor(message, options) { super(message, options); this.name = "CdpError"; } }
-class CdpProtocolError extends CdpError {
-  constructor(method, payload) {
-    const code = payload && Object.hasOwn(payload, "code") ? payload.code : undefined;
-    const message = typeof payload?.message === "string" ? payload.message : "unknown CDP error";
-    const codeText = code === undefined ? "" : ` (${code})`;
-    super(`CDP ${method} failed${codeText}: ${message}`);
-    this.name = "CdpProtocolError";
-    if (code !== undefined) this.code = code;
-    if (payload && Object.hasOwn(payload, "data")) this.data = payload.data;
-  }
-}
-class CdpEvaluationError extends CdpError {
-  constructor(exceptionDetails) {
-    const description = exceptionDetails?.exception?.description;
-    const text = exceptionDetails?.text;
-    const detail = typeof description === "string" && description.length > 0
-      ? description
-      : typeof text === "string" && text.length > 0 ? text : "unknown JavaScript exception";
-    super(`Runtime.evaluate failed: ${detail}`);
-    this.name = "CdpEvaluationError";
-    this.exceptionDetails = exceptionDetails;
-  }
-}
-
-class Cdp {
-  constructor(url, { connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS, commandTimeoutMs = DEFAULT_COMMAND_TIMEOUT_MS } = {}) {
-    parseLoopbackWebSocketUrl(url); // reject non-loopback URLs up front
-    this.url = url;
-    this.connectTimeoutMs = connectTimeoutMs;
-    this.commandTimeoutMs = commandTimeoutMs;
-    this.ws = null;
-    this.id = 0;
-    this.pending = new Map();
-    this.queue = [];
-    this.ready = null;
-    this.opened = false;
-    this.closed = false;
-    this.closeStarted = false;
-    this.terminalError = null;
-    this.openPromise = null;
-    this.resolveOpen = null;
-    this.rejectOpen = null;
-    this.connectTimer = null;
-  }
-
-  open() {
-    if (this.closed) return Promise.reject(this.terminalError ?? new Error("CDP session is closed"));
-    if (this.opened) return Promise.resolve(this);
-    if (this.openPromise) return this.openPromise;
-
-    this.openPromise = new Promise((resolve, reject) => {
-      this.resolveOpen = resolve;
-      this.rejectOpen = reject;
-    });
-    this.connectTimer = setTimeout(() => {
-      this.terminate(new Error(`CDP WebSocket connect timed out after ${this.connectTimeoutMs}ms`));
-      this.closeSocket();
-    }, this.connectTimeoutMs);
-
-    try {
-      this.ws = new WebSocket(this.url);
-    } catch (error) {
-      this.terminate(new Error(`failed to open CDP WebSocket: ${errorMessage(error)}`, { cause: error }));
-      return this.openPromise;
-    }
-
-    this.ws.onopen = () => {
-      if (this.closed || this.opened) return;
-      this.clearConnectTimer();
-      Promise.all([this.send("Runtime.enable"), this.send("Page.enable")])
-        .then(() => {
-          if (this.closed) return;
-          this.opened = true;
-          const resolve = this.resolveOpen;
-          this.resolveOpen = null;
-          this.rejectOpen = null;
-          resolve?.(this);
-        })
-        .catch((error) => { this.terminate(error); this.closeSocket(); });
-    };
-    this.ws.onmessage = (event) => {
-      let msg;
-      try { msg = JSON.parse(event.data); } catch (error) { this.terminate(new Error(`received malformed CDP JSON: ${errorMessage(error)}`)); this.closeSocket(); return; }
-      if (!Number.isInteger(msg?.id)) return;
-      const pending = this.pending.get(msg.id);
-      if (!pending) return;
-      this.pending.delete(msg.id);
-      clearTimeout(pending.timer);
-      if (msg.error) pending.reject(new CdpProtocolError(pending.method, msg.error));
-      else pending.resolve(msg.result);
-    };
-    this.ws.onerror = (event) => {
-      const source = event?.error;
-      this.terminate(new Error(`CDP WebSocket error: ${source instanceof Error ? source.message : "unknown socket error"}`, { cause: source instanceof Error ? source : undefined }));
-      this.closeSocket();
-    };
-    this.ws.onclose = (event) => {
-      this.closeStarted = true;
-      const code = Number.isInteger(event?.code) ? event.code : "unknown";
-      const reason = typeof event?.reason === "string" && event.reason.length > 0 ? `, reason: ${event.reason}` : "";
-      this.terminate(new Error(`CDP WebSocket closed (code: ${code}${reason})`));
-    };
-    return this.openPromise;
-  }
-
-  // Backwards-compatible alias: connect() === open()
-  connect() { return this.open(); }
-
-  send(method, params = {}, sessionId = null, { timeoutMs = this.commandTimeoutMs } = {}) {
-    if (this.closed) return Promise.reject(this.terminalError ?? new Error("CDP session is closed"));
-    const OPEN = typeof WebSocket !== "undefined" ? WebSocket.OPEN ?? 1 : 1;
-    if (!this.ws || this.ws.readyState !== OPEN) return Promise.reject(new Error("CDP session is not open"));
-    const id = ++this.id;
-    const payload = { id, method, params };
-    if (sessionId) payload.sessionId = sessionId;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`CDP ${method} timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-      this.pending.set(id, { method, resolve, reject, timer });
-      try {
-        this.ws.send(JSON.stringify(payload));
-      } catch (error) {
-        clearTimeout(timer);
-        this.pending.delete(id);
-        reject(new Error(`failed to send CDP ${method}: ${errorMessage(error)}`, { cause: error }));
-      }
-    });
-  }
-
-  async evaluate(expression, sessionId = null, awaitPromise = true, returnByValue = true) {
-    const r = await this.send("Runtime.evaluate", { expression, awaitPromise, returnByValue, contextId: undefined }, sessionId);
-    if (r?.exceptionDetails) throw new CdpEvaluationError(r.exceptionDetails);
-    return r?.result?.value;
-  }
-
-  terminate(error) {
-    if (this.terminalError) return;
-    this.clearConnectTimer();
-    this.terminalError = error;
-    this.closed = true;
-    const rejectOpen = this.rejectOpen;
-    this.resolveOpen = null;
-    this.rejectOpen = null;
-    rejectOpen?.(error);
-    for (const { reject, timer } of this.pending.values()) { clearTimeout(timer); reject(error); }
-    this.pending.clear();
-  }
-
-  clearConnectTimer() {
-    if (this.connectTimer === null) return;
-    clearTimeout(this.connectTimer);
-    this.connectTimer = null;
-  }
-
-  closeSocket() {
-    if (this.closeStarted) return;
-    this.closeStarted = true;
-    if (!this.ws || typeof this.ws.close !== "function") return;
-    const CLOSING = typeof WebSocket !== "undefined" ? WebSocket.CLOSING ?? 2 : 2;
-    const CLOSED = typeof WebSocket !== "undefined" ? WebSocket.CLOSED ?? 3 : 3;
-    if (this.ws.readyState === CLOSING || this.ws.readyState === CLOSED) return;
-    try { this.ws.close(); } catch {}
-  }
-
-  close() { this.closeSocket(); }
-}
 
 // ---- Payload building ----
 
@@ -314,6 +81,7 @@ async function buildPayload(themeDir) {
   const themePath = path.join(themeDir, "theme.json");
   let theme = {};
   try { theme = JSON.parse(await fs.readFile(themePath, "utf8")); } catch { throw new Error(`Cannot read theme.json at ${themePath}`); }
+  validateThemeJson(theme); // schema validation (loose: warns on unknown fields)
 
   // Resolve art spec.
   const artSpec = await resolveArtSpec(themeDir, theme);

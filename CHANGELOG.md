@@ -16,6 +16,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   issue/PR templates, `CODEOWNERS`.
 - GitHub Actions CI (`syntax-check` matrix: Node 20/22 + Python 3.11–3.13).
 - `requirements.txt` declaring Pillow for `gen_presets.py`.
+- **CDP client as a reusable module** (`macos|windows/scripts/cdp-client.mjs`):
+  loopback URL + port validation, connect/command timeouts, typed errors
+  (`CdpProtocolError` / `CdpEvaluationError`), request queueing for commands
+  issued before the socket opens, and a clean teardown path. The injector now
+  only orchestrates; all CDP transport lives in this module.
+- **Theme schema validation** (`schemas/theme.schema.json` + `theme-schema.mjs`):
+  `theme.json` is validated at apply time; invalid themes fail loudly instead of
+  silently mis-rendering. `npm run check:schema` validates every bundled preset.
+- **npm project scaffolding** (`package.json`): `npm run check` runs syntax +
+  mirror consistency + schema + payload smoke; `engines.node >= 20`.
 
 ### Changed
 
@@ -43,12 +53,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `../` escapes are rejected).
 - Launcher now discovers Node via `$HOME/.workbuddy/binaries/node/versions/*`
   instead of a machine-specific hardcoded path.
+- **Renderer engine de-duplicated** (`renderer-inject.js`): palette extraction
+  for both the built-in `analyzeArt` and the in-app menu upload now share one
+  `analyzeImage` (24-bin hue quantization); the menu's ad-hoc 12-bucket
+  implementation was removed. `cleanup()` now nulls out observer/timer
+  references so a re-inject never leaks MutationObservers.
 
 ### Fixed
 
 - Committed git author metadata no longer exposes a machine-specific identity.
 - Plaintext PAT removed from the `origin` remote URL (credentials now read only
   from the local `~/.github_pat` during push).
+- Menu palette extractor declared 24 bins but only ever filled 12 (hue bucket
+  math); now shares the same 24-bin quantizer as the built-in analysis.
 
 ## [1.0.0] - 2026-07-29
 

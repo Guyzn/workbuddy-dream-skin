@@ -190,7 +190,9 @@ renderer hint `renderer/index.html`.
 
 ## Resources
 
-- `macos/scripts/injector.mjs` — CDP client + injector + CLI (zero deps, Node >= 20).
+- `macos/scripts/injector.mjs` — CLI orchestrator (apply / verify / restore / inspect / watch / check-payload).
+- `macos/scripts/cdp-client.mjs` — CDP transport (loopback validation, timeouts, typed errors, request queue).
+- `macos/scripts/theme-schema.mjs` + `schemas/theme.schema.json` — theme.json validation (checked at apply time).
 - `macos/scripts/common-macos.sh` — shared macOS helpers (state machine, launchd, port mgmt).
 - `macos/scripts/start-dream-skin-macos.sh` — apply / re-apply skin.
 - `macos/scripts/pause-dream-skin-macos.sh` / `restore-dream-skin-macos.sh` — stop / full restore.
