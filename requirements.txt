@@ -1,0 +1,3 @@
+# Runtime dependency for macos/scripts/gen_presets.py only.
+# The injector itself (injector.mjs) has zero third-party dependencies.
+Pillow>=10.0

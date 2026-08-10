@@ -4,6 +4,18 @@ An unofficial external theme studio for the **WorkBuddy** desktop app.
 Local loopback CDP injection — it does **not** modify the official `.app` /
 `app.asar` or its code signature, and never touches your API keys or model config.
 
+## Install with AI (recommended)
+
+Send this repository's GitHub URL to any AI assistant (WorkBuddy / CodeBuddy /
+Claude / Cursor, etc.) along with:
+
+> Use this open-source project to change my WorkBuddy theme
+
+The AI clones the repo, reads the [`SKILL.md`](SKILL.md), and automatically
+completes **platform detection → install → start skin → verify**. You only need
+to save your current WorkBuddy task in the dialog. Daily switching afterwards
+happens in the menu bar / system tray / CLI.
+
 ## Features
 - Real, interactive theming: native sidebar / chat / input controls stay live.
 - Full-window continuous background with route-aware scrims.

@@ -1,0 +1,23 @@
+# Line endings: normalize everything, then set per-file-type policy.
+* text=auto
+
+# Shell / Node / launchers: LF
+*.sh text eol=lf
+*.command text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.py text eol=lf
+
+# PowerShell: CRLF (Windows convention)
+*.ps1 text eol=crlf
+
+# Images
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary

@@ -134,7 +134,7 @@ resolve_node_runtime() {
   # Prefer WorkBuddy's bundled Node, then managed, then system.
   local candidates=()
   candidates+=("$WORKBUDDY_BUNDLE/Contents/Resources/cli/vendor/node/"*"/bin/node")
-  candidates+=("/Users/songshunsteel/.workbuddy/binaries/node/versions/22.22.2/bin/node")
+  candidates+=("$HOME/.workbuddy/binaries/node/versions/"*"/bin/node")
   candidates+=("/usr/local/bin/node" "/usr/bin/node")
   local c path ver major
   for c in "${candidates[@]}"; do

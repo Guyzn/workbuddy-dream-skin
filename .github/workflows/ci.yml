@@ -1,0 +1,61 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["20", "22"]
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Node syntax check (both platform mirrors)
+        run: |
+          node --check macos/scripts/injector.mjs
+          node --check windows/scripts/injector.mjs
+
+      - name: Mirror consistency check
+        run: |
+          diff macos/scripts/injector.mjs windows/scripts/injector.mjs
+          diff macos/assets/dream-skin.css windows/assets/dream-skin.css
+          diff macos/assets/renderer-inject.js windows/assets/renderer-inject.js
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Python syntax check
+        run: python -m compileall -q macos/scripts/gen_presets.py
+
+      - name: Shell syntax check (macOS scripts)
+        run: |
+          for f in macos/scripts/*.sh macos/menubar/*.sh; do bash -n "$f"; done
+
+      - name: Payload build smoke test
+        run: |
+          node macos/scripts/injector.mjs --check-payload --theme-dir macos/presets/preset-aurora-dusk
+          node macos/scripts/injector.mjs --check-payload --theme-dir macos/presets/preset-midnight-bloom
+          node macos/scripts/injector.mjs --check-payload --theme-dir macos/presets/preset-ember-zen
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Block obvious secrets / PII in tracked files
+        run: |
+          if grep -rInE "ghp_[A-Za-z0-9]{30,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY" --exclude-dir=.git .; then
+            echo "Secret pattern found!"; exit 1
+          fi
+          echo "clean"
