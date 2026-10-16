@@ -6,8 +6,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-16
+
 ### Added
 
+- **Official pipeline mode** (`macos/scripts/wb-skin.mjs`, zero-dependency
+  Node): compiles a wallpaper and its extracted palette into an official-format
+  skin and installs it into the app's local theme cache
+  (`~/.workbuddy/appearance-resources/<theme>-<version>/`), which the official
+  SkinManager already reads first on every theme switch. No CDP port, no
+  daemon; subcommands `list` / `build` / `install` / `restore` / `resync` /
+  `status`, byte-exact restore, and `resync` re-applies after the upstream
+  theme updates.
+- **Artwork guidance** for custom images (landscape, long edge 2560+, JPG
+  preferred or PNG, <=16MB) documented in `README.md`, `README.en.md` and
+  `SKILL.md`; non JPG/PNG inputs (HEIC/WebP/TIFF/BMP) are normalized to JPEG
+  at build time.
+- README section "官方管线版（wb-skin）"; `README.en.md` gains a matching
+  overview section.
 - `SKILL.md` — AI one-click install workflow (platform detection, install,
   start, verify, restore).
 - README "用 AI 一键安装（推荐）" section.
@@ -29,6 +45,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- README rewritten around the two-path story (classic CDP mode + official
+  pipeline) with naturalized prose; custom-image guidance unified across both
+  modes.
 - **Hybrid theming layer** (`renderer-inject.js` + `dream-skin.css`): the stable
   `--vscode-*` base is kept, with a WorkBuddy-specific `--cb-*` increment added
   (titlebar, dark buttons, scrollbars, strokes, team cards) mapped onto the

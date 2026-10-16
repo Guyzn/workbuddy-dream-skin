@@ -129,7 +129,7 @@ safe-area detection, per-route scrim (home vs task), blur/frost, and a
   ./scripts/switch-theme-macos.sh --id preset-aurora-dusk
   # Windows: .\switch-theme-windows.ps1 -Id preset-aurora-dusk
   ```
-- Import your own clean background (recommend 2560x1440, <=16MB, no UI/text/watermark):
+- Import your own clean background (landscape, long edge 2560+, JPG preferred or PNG, <=16MB, no UI/text/watermark):
   ```bash
   ./scripts/customize-theme-macos.sh --image "/path/to/bg.jpg" --name "My Skin" --accent "#3fd6a6"
   ```
@@ -197,6 +197,7 @@ renderer hint `renderer/index.html`.
 - `macos/scripts/start-dream-skin-macos.sh` — apply / re-apply skin.
 - `macos/scripts/pause-dream-skin-macos.sh` / `restore-dream-skin-macos.sh` — stop / full restore.
 - `macos/scripts/switch-theme-macos.sh` / `customize-theme-macos.sh` — preset switch / import image.
+- `macos/scripts/wb-skin.mjs` — official-pipeline skin forge (WorkBuddy 5.8+): compiles a wallpaper + palette into the app's local theme cache, rendered by the official theme engine with no CDP. See the `README.md` section 官方管线版（wb-skin）.
 - `macos/scripts/doctor-macos.sh` / `verify-dream-skin-macos.sh` — diagnostics.
 - `macos/assets/dream-skin.css` — injected stylesheet (background layer, frost, scrim).
 - `macos/assets/renderer-inject.js` — in-renderer engine (palette, focus, safe-area, keep-alive).

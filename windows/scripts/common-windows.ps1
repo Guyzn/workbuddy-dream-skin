@@ -10,7 +10,7 @@ $StatePath   = Join-Path $StateRoot "state.json"
 $ThemeBackup = Join-Path $StateRoot "theme-backup.json"
 $ThemeDir    = Join-Path $StateRoot "theme"
 $ThemesRoot  = Join-Path $StateRoot "themes"
-$SKIN_VERSION = "1.0.0"
+$SKIN_VERSION = "1.1.0"
 
 function Fail($msg) { Write-Error "WorkBuddy Dream Skin: $msg"; exit 1 }
 

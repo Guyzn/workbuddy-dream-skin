@@ -25,6 +25,7 @@ jobs:
           node --check macos/scripts/injector.mjs
           node --check macos/scripts/cdp-client.mjs
           node --check macos/scripts/theme-schema.mjs
+          node --check macos/scripts/wb-skin.mjs
           node --check windows/scripts/injector.mjs
           node --check windows/scripts/cdp-client.mjs
           node --check windows/scripts/theme-schema.mjs
